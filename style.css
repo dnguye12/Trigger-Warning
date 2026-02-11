@@ -1,0 +1,22 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+canvas {
+  display: block;
+}
+
+.quitBtn {
+  border: 1px solid #222;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  transition: color 300ms;
+}
+
+.quitBtn:hover {
+  background: #f0f0f0;
+  cursor: pointer;
+}
