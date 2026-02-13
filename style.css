@@ -2,6 +2,8 @@ html,
 body {
   margin: 0;
   padding: 0;
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
 }
 
 canvas {
@@ -19,4 +21,33 @@ canvas {
 .quitBtn:hover {
   background: #f0f0f0;
   cursor: pointer;
+}
+
+.monthPanel {
+  position: fixed;
+  right: 16px;
+  top: 52px;
+  width: 420px;
+  max-height: 70vh;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.incidentPanel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 420px;
+  max-height: 50vh;
+  overflow: auto;
+  background: white;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
 }
