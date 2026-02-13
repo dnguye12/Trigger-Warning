@@ -64,6 +64,10 @@ const MONTH_PAD_Y = 12;
 
 const MONTH_LABELS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
+const SPLATTER_MARGIN = 3;
+const PLACE_TRIES_OVERVIEW = 12;
+const PLACE_TRIES_DETAIL = 80;
+
 function preload() {
     table = loadTable("school-shootings-data.csv", "csv", "header")
 }
@@ -415,6 +419,9 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
     }
 
     // Draw splatters at block centers
+    // Draw ALL incidents in each month block, arranged like circle mode
+    hoveredIncident = null;
+
     for (let yi = 0; yi < yCount; yi++) {
         for (let mi = 0; mi < 12; mi++) {
             const b = buckets[yi][mi];
@@ -423,24 +430,92 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
             const cx = gx + mi * blockW + blockW / 2;
             const cy = gy + yi * blockH + blockH / 2;
 
-            // Deterministic rotation per record
-            const seed = hashToInt(`${b.sample.year}-${b.sample.school_name}|${mi}|${yi}`);
-            randomSeed(seed);
-            const rot = random(TWO_PI);
+            const list = b.incidents; // already sorted: high casualties first
+            const k = list.length;
 
-            // Scale splatter to fit block (don’t exceed block)
-            const maxR = 0.45 * min(blockW, blockH);
-            const minR = isDetail ? max(5, maxR * 0.12) : 3
-            let frac = b.sevSum / maxSevSum
-            frac = constrain(frac, 0, 1)
-            const t = sqrt(frac)
-            const rDraw = lerp(minR, maxR, t)
+            // available radius inside the month block
+            const Rm = 0.45 * min(blockW, blockH)
+            const rx = blockW * 0.48;
+            const ry = blockH * 0.48;
 
-            push();
-            translate(cx, cy);
-            rotate(rot);
-            drawSplatter(rDraw);
-            pop();
+            const xLeft = gx + mi * blockW;
+            const yTop = gy + yi * blockH;
+
+            const bounds = {
+                xMin: xLeft,
+                xMax: xLeft + blockW,
+                yMin: yTop,
+                yMax: yTop + blockH
+            };
+            const center = { x: cx, y: cy };
+
+            // track placed splatters in THIS month block only
+            const placed = [];
+
+            // how hard to try (more in detail)
+            const tries = isDetail ? PLACE_TRIES_DETAIL : PLACE_TRIES_OVERVIEW;
+
+            for (let i = 0; i < k; i++) {
+                const d = list[i];
+
+                // size (your existing rDraw logic)
+                const maxMark = min(Rm * 0.55, isDetail ? 20 : 12);
+                const rDraw = constrain(d.radius * (isDetail ? 1.2 : 0.8), 2.2, maxMark);
+
+                // deterministic rng per incident
+                const seed = hashToInt(`${d.ts}|${d.school_name}|${d.year}|${yi}|${mi}|${i}`);
+                const rng = makeRng(seed);
+
+                // your existing base layout (ellipse/squircle) gives baseX/baseY
+                // (use whichever version you already implemented)
+                const angle = i * GOLDEN_ANGLE + (rng() * 2 - 1) * 0.12;
+
+                // example: ellipse fill in month rectangle
+                const frac = (k <= 1) ? 0 : i / (k - 1);
+                const rho = pow(frac, 0.82);
+                const rx = blockW * 0.48;
+                const ry = blockH * 0.48;
+
+                const baseX = cx + cos(angle) * rho * rx;
+                const baseY = cy + sin(angle) * rho * ry;
+
+                // resolve overlaps with margin (push outward)
+                const pos = placeWithMargin(
+                    baseX, baseY, rDraw,
+                    placed,
+                    center,
+                    bounds,
+                    rng,
+                    tries,
+                    SPLATTER_MARGIN
+                );
+
+                // remember for next placements
+                placed.push({ x: pos.x, y: pos.y, r: rDraw, d });
+
+                // draw (don’t use p5 random() for layout anymore)
+                const rot = rng() * TWO_PI;
+                randomSeed(seed + 999); // only affects splatter shape
+                push();
+                translate(pos.x, pos.y);
+                rotate(rot);
+                drawSplatter(rDraw);
+                pop();
+
+                // hover test uses pos (not base)
+                if (isDetail) {
+                    const dx = mouseX - pos.x;
+                    const dy = mouseY - pos.y;
+                    const dist2 = dx * dx + dy * dy;
+                    if (dist2 <= rDraw * rDraw) {
+                        if (!hoveredIncident || dist2 < hoveredIncident.dist2) {
+                            hoveredIncident = { d, x: pos.x, y: pos.y, r: rDraw, dist2 };
+                        }
+                    }
+                }
+            }
+
+
         }
     }
 
@@ -589,15 +664,6 @@ const drawSplatter = (radius) => {
     endShape(CLOSE);
 
     noStroke();
-    fill(220, 38, 38, 60);
-
-    const k = floor(random(3, 9));
-    for (let i = 0; i < k; i++) {
-        const a = random(TWO_PI);
-        const dist = radius * random(1.0, 2.5);
-        const rr = max(1.5, radius * random(0.08, 0.18));
-        ellipse(cos(a) * dist, sin(a) * dist, rr * 2, rr * 2);
-    }
 }
 
 const hashToInt = (str) => {
@@ -738,6 +804,19 @@ const pickIncident = (incidents, timeRange) => {
 
         if (buckets[yi][m].sevSum > maxSevSum) {
             maxSevSum = buckets[yi][m].sevSum
+        }
+    }
+
+    for (let yi = 0; yi < yCount; yi++) {
+        for (let mi = 0; mi < 12; mi++) {
+            const b = buckets[yi][mi];
+            if (!b) continue;
+
+            b.incidents.sort((a, c) => {
+                const ca = (a.casualties || 0);
+                const cc = (c.casualties || 0);
+                return (cc - ca) || (c.sev - a.sev) || (a.ts - c.ts);
+            });
         }
     }
 
@@ -1253,4 +1332,75 @@ function drawIncidentTooltip(d, mx, my) {
     text(line1, tx + pad, ty + 22);
     text(line2, tx + pad, ty + 38);
     pop();
+}
+
+const makeRng = (seed) => {
+    let s = (seed >>> 0) || 1;
+    return () => {
+        s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+        return s / 4294967296;
+    };
+}
+
+const overlapsAny = (x, y, r, placed, margin) => {
+    for (const p of placed) {
+        const rr = r + p.r + margin;
+        const dx = x - p.x;
+        const dy = y - p.y;
+        if (dx * dx + dy * dy < rr * rr) return true;
+    }
+    return false;
+}
+
+const placeWithMargin = (baseX, baseY, r, placed, center, bounds, rng, maxTries, margin) => {
+    // if already ok, accept
+    if (!overlapsAny(baseX, baseY, r, placed, margin)) {
+        return { x: baseX, y: baseY };
+    }
+
+    // direction from center (keeps your "more severe = more centered" ordering)
+    let dirX = baseX - center.x;
+    let dirY = baseY - center.y;
+    let len = Math.hypot(dirX, dirY);
+
+    if (len < 1e-6) {
+        const a = rng() * TWO_PI;
+        dirX = Math.cos(a);
+        dirY = Math.sin(a);
+        len = 1;
+    }
+    dirX /= len; dirY /= len;
+
+    // perpendicular for sideways jitter
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    const step = (r + margin) * 1.25;
+
+    for (let t = 1; t <= maxTries; t++) {
+        const outward = t * step;
+        const jitter = (rng() * 2 - 1) * step * 0.9;
+
+        // small random rotation of outward direction (still deterministic via rng)
+        const angJ = (rng() * 2 - 1) * 0.18;
+        const ca = Math.cos(angJ);
+        const sa = Math.sin(angJ);
+        const odx = dirX * ca - dirY * sa;
+        const ody = dirX * sa + dirY * ca;
+
+        let x = baseX + odx * outward + perpX * jitter;
+        let y = baseY + ody * outward + perpY * jitter;
+
+        // clamp inside bounds (keep splatter fully inside)
+        x = constrain(x, bounds.xMin + r, bounds.xMax - r);
+        y = constrain(y, bounds.yMin + r, bounds.yMax - r);
+
+        if (!overlapsAny(x, y, r, placed, margin)) return { x, y };
+    }
+
+    // last resort: clamp base and accept
+    return {
+        x: constrain(baseX, bounds.xMin + r, bounds.xMax - r),
+        y: constrain(baseY, bounds.yMin + r, bounds.yMax - r)
+    };
 }
