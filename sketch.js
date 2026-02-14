@@ -6,15 +6,15 @@ let hoveredIncident = null
 let cnv = null
 
 let zooming = false;
-let zoomFrom = null;         // {x,y,w,h}
-let zoomTo = null;           // {x,y,w,h}
-let zoomCell = null;         // {r,c} the target cell for zoom-in
-let zoomT = 0;               // 0..1
-let zoomDir = "in";          // "in" or "out"
-const ZOOM_MS = 420;         // duration
+let zoomFrom = null;            // {x,y,w,h}
+let zoomTo = null;              // {x,y,w,h}
+let zoomCell = null;            // {r,c} the target cell for zoom-in
+let zoomT = 0;                  // 0..1
+let zoomDir = "in";             // "in" or "out"
+const ZOOM_MS = 420;            // duration
 let zoomStartMs = 0;
 
-let hoveredMonth = null; // { yi, mi, year, bucket }
+let hoveredMonth = null;        // { yi, mi, year, bucket }
 let monthPanel = null;
 let monthPanelContent = null;
 let monthPanelOpen = false;
@@ -103,7 +103,7 @@ function setup() {
     backBtn.addClass("btn-sm");
     backBtn.mousePressed(() => {
         if (zooming) return;
-        if (selectedCell) startZoomOut();   // animate back to overview
+        if (selectedCell) startZoomOut();
     });
     backBtn.hide();
 
@@ -141,7 +141,6 @@ function setup() {
     incidentPanelContent = createDiv("");
     incidentPanelContent.parent(incidentPanel);
 
-    // map container
     mapDiv = createDiv("");
     mapDiv.parent(incidentPanel);
     mapDiv.id("incidentMap");
@@ -367,7 +366,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
     const innerW = cellW - 2 * SLOT_PAD - leftLabelW;
     const innerH = cellH - 2 * SLOT_PAD - topLabelH;
 
-    // month block size chosen to fit both width and height
     const blockW = innerW / MONTH_COLS;
     const blockH = innerH / 10;
 
@@ -380,7 +378,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
         noStroke();
         fill(LABEL);
 
-        // Month labels above columns
         textSize(11);
         textAlign(CENTER, CENTER);
         for (let mi = 0; mi < 12; mi++) {
@@ -388,9 +385,8 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
             text(MONTH_LABELS[mi], cx, gy - topLabelH / 2);
         }
 
-        // Year labels: start, middle, end
         const yStart = timeRange.startY;
-        const yEndInclusive = timeRange.endY - 1; // endY is exclusive
+        const yEndInclusive = timeRange.endY - 1;
 
         const yearMarks = [];
 
@@ -406,7 +402,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
         }
     }
 
-    // Optional: draw the mini-grid lines (light)
     stroke(0, 0, 0, 30);
     strokeWeight(1);
     noFill();
@@ -418,8 +413,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
         line(gx, gy + r2 * blockH, gx + innerW, gy + r2 * blockH);
     }
 
-    // Draw splatters at block centers
-    // Draw ALL incidents in each month block, arranged like circle mode
     hoveredIncident = null;
 
     for (let yi = 0; yi < yCount; yi++) {
@@ -430,13 +423,10 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
             const cx = gx + mi * blockW + blockW / 2;
             const cy = gy + yi * blockH + blockH / 2;
 
-            const list = b.incidents; // already sorted: high casualties first
+            const list = b.incidents;
             const k = list.length;
 
-            // available radius inside the month block
             const Rm = 0.45 * min(blockW, blockH)
-            const rx = blockW * 0.48;
-            const ry = blockH * 0.48;
 
             const xLeft = gx + mi * blockW;
             const yTop = gy + yi * blockH;
@@ -449,28 +439,20 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
             };
             const center = { x: cx, y: cy };
 
-            // track placed splatters in THIS month block only
             const placed = [];
 
-            // how hard to try (more in detail)
             const tries = isDetail ? PLACE_TRIES_DETAIL : PLACE_TRIES_OVERVIEW;
 
             for (let i = 0; i < k; i++) {
                 const d = list[i];
 
-                // size (your existing rDraw logic)
-                const maxMark = min(Rm * 0.55, isDetail ? 20 : 12);
-                const rDraw = constrain(d.radius * (isDetail ? 1.2 : 0.8), 2.2, maxMark);
+                const rDraw = max(d.radius * (isDetail ? 1 : 0.5), 1);
 
-                // deterministic rng per incident
                 const seed = hashToInt(`${d.ts}|${d.school_name}|${d.year}|${yi}|${mi}|${i}`);
                 const rng = makeRng(seed);
 
-                // your existing base layout (ellipse/squircle) gives baseX/baseY
-                // (use whichever version you already implemented)
                 const angle = i * GOLDEN_ANGLE + (rng() * 2 - 1) * 0.12;
 
-                // example: ellipse fill in month rectangle
                 const frac = (k <= 1) ? 0 : i / (k - 1);
                 const rho = pow(frac, 0.82);
                 const rx = blockW * 0.48;
@@ -479,7 +461,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
                 const baseX = cx + cos(angle) * rho * rx;
                 const baseY = cy + sin(angle) * rho * ry;
 
-                // resolve overlaps with margin (push outward)
                 const pos = placeWithMargin(
                     baseX, baseY, rDraw,
                     placed,
@@ -490,19 +471,16 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
                     SPLATTER_MARGIN
                 );
 
-                // remember for next placements
                 placed.push({ x: pos.x, y: pos.y, r: rDraw, d });
 
-                // draw (don’t use p5 random() for layout anymore)
                 const rot = rng() * TWO_PI;
-                randomSeed(seed + 999); // only affects splatter shape
+                randomSeed(seed + 999);
                 push();
                 translate(pos.x, pos.y);
                 rotate(rot);
                 drawSplatter(rDraw);
                 pop();
 
-                // hover test uses pos (not base)
                 if (isDetail) {
                     const dx = mouseX - pos.x;
                     const dy = mouseY - pos.y;
@@ -517,6 +495,10 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
 
 
         }
+    }
+
+    if (isDetail && hoveredIncident) {
+        drawIncidentTooltip(hoveredIncident.d, mouseX, mouseY);
     }
 
     if (isDetail) {
@@ -537,34 +519,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
                 if (b) {
                     const year = timeRange.startY + yi;
                     hoveredMonth = { yi, mi, year, bucket: b };
-
-                    if (!monthPanelOpen) {
-                        const title = `${MONTH_LABELS[mi]} ${year}`;
-                        const line2 = `Total casualties: ${b.casualtiesSum}`;
-                        const line3 = `Incidents: ${b.count}`;
-
-                        const pad = 8;
-                        textSize(12);
-                        const w = max(textWidth(title), textWidth(line2), textWidth(line3)) + pad * 2;
-                        const h = 50;
-
-                        let tx = mouseX + 12;
-                        let ty = mouseY + 12;
-                        if (tx + w > W - 8) tx = mouseX - w - 12;
-                        if (ty + h > H - 8) ty = mouseY - h - 12;
-
-                        push();
-                        noStroke();
-                        fill(255, 245);
-                        rect(tx, ty, w, h, 8);
-
-                        fill(34);
-                        textAlign(LEFT, TOP);
-                        text(title, tx + pad, ty + 6);
-                        text(line2, tx + pad, ty + 22);
-                        text(line3, tx + pad, ty + 36);
-                        pop();
-                    }
                 }
             }
         }
@@ -572,7 +526,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
 }
 
 const drawDetail = (r, c) => {
-    // Make a big “cell” that fills the canvas with some padding
     const pad = 0;
 
     const x0 = pad;
@@ -580,13 +533,11 @@ const drawDetail = (r, c) => {
     const cellW = W - pad * 2;
     const cellH = H - pad * 2;
 
-    // Background for the focused cell
     fill(BG);
     stroke(CELL_STROKE);
     strokeWeight(2);
     rect(x0, y0, cellW, cellH);
 
-    // Title
     noStroke();
     fill(LABEL);
     textSize(24);
@@ -594,13 +545,11 @@ const drawDetail = (r, c) => {
     const title = `${SCHOOL_ROWS[r].label} — ${TIME_RANGE[c].label}`;
     text(title, x0 + 16, y0 + 16);
 
-    // Filter records for that cell
     const levelKey = SCHOOL_ROWS[r].key;
     const rangeKey = TIME_RANGE[c].key;
 
     const arr = records.filter(d => d.level === levelKey && d.timeRange === rangeKey);
 
-    // Draw content below title area
     const headerH = 38;
     drawCellContent(arr, TIME_RANGE[c], x0, y0 + headerH, cellW, cellH - headerH, true);
 }
@@ -675,14 +624,14 @@ const hashToInt = (str) => {
     return h >>> 0
 }
 
-function rangeStartMs(t) {
+const rangeStartMs = (t) => {
     return new Date(t.startY, 0, 1).getTime();
 }
-function rangeEndMs(t) {
+const rangeEndMs = (t) => {
     return new Date(t.endY, 0, 1).getTime();
 }
 
-function getRangeByKey(key) {
+const getRangeByKey = (key) => {
     return TIME_RANGE.find(t => t.key === key);
 }
 
@@ -851,7 +800,6 @@ function mousePressed(e) {
         return
     }
 
-    // Detail mode: click a hovered month to open list
     if (selectedCell) {
         if (viewMode === "calendar") {
             if (hoveredMonth && hoveredMonth.bucket) {
@@ -867,10 +815,9 @@ function mousePressed(e) {
                 openIncident(hoveredIncident.d);
             }
         }
-        return; // don't zoom out on background click; use Back / wheel up / ESC
+        return
     }
 
-    // Overview: click cell to zoom in
     const cols = TIME_RANGE.length;
     const rows = SCHOOL_ROWS.length;
     const cellW = (W - M.left - M.right) / cols;
@@ -918,7 +865,7 @@ const easeInOutCubic = (t) => {
     return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;
 }
 
-function getOverviewCellRect(r, c) {
+const getOverviewCellRect = (r, c) => {
     const cols = TIME_RANGE.length;
     const rows = SCHOOL_ROWS.length;
     const cellW = (W - M.left - M.right) / cols;
@@ -932,12 +879,12 @@ function getOverviewCellRect(r, c) {
     };
 }
 
-function getDetailRect() {
+const getDetailRect = () => {
     const pad = 24;
     return { x: pad, y: pad, w: W - pad * 2, h: H - pad * 2 };
 }
 
-function lerpRect(a, b, t) {
+const lerpRect = (a, b, t) => {
     return {
         x: lerp(a.x, b.x, t),
         y: lerp(a.y, b.y, t),
@@ -946,13 +893,13 @@ function lerpRect(a, b, t) {
     };
 }
 
-function startZoomIn(cell) {
+const startZoomIn = (cell) => {
     if (zooming) return;
 
     zooming = true;
     zoomDir = "in";
     zoomCell = cell;
-    selectedCell = null;        // not in detail yet
+    selectedCell = null;
 
     modeBtn.hide()
 
@@ -964,7 +911,7 @@ function startZoomIn(cell) {
     loop();
 }
 
-function startZoomOut() {
+const startZoomOut = () => {
     if (zooming) return;
     if (!selectedCell) return;
 
@@ -987,34 +934,27 @@ function startZoomOut() {
     loop();
 }
 
-function drawZoomFrame() {
-    // optional: draw the overview faintly as context during zoom
+const drawZoomFrame = () => {
     push();
-    tint(255, 130); // if you had images; otherwise just draw normally
+    tint(255, 130);
     pop();
 
-    // Draw overview grid behind (so you see what you're zooming from/to)
-    // If this is too slow, you can replace with a simple background rect.
     drawOverview();
 
-    // Interpolate rect
     const elapsed = millis() - zoomStartMs;
     const raw = constrain(elapsed / ZOOM_MS, 0, 1);
     const e = easeInOutCubic(raw);
 
     const rectNow = lerpRect(zoomFrom, zoomTo, e);
 
-    // Draw a slightly stronger border around the zooming cell
     fill(BG);
     stroke(CELL_STROKE);
     strokeWeight(1);
     rect(rectNow.x, rectNow.y, rectNow.w, rectNow.h);
 
-    // Header + content
     const r = zoomCell.r;
     const c = zoomCell.c;
 
-    // Title fades in as you zoom (nice touch)
     noStroke();
     fill(LABEL);
     textSize(lerp(12, 18, e));
@@ -1024,7 +964,6 @@ function drawZoomFrame() {
         text(title, rectNow.x + 12, rectNow.y + 10);
     }
 
-    // Filter and render content in this interpolated rect
     const levelKey = SCHOOL_ROWS[r].key;
     const rangeKey = TIME_RANGE[c].key;
     const arr = records.filter(d => d.level === levelKey && d.timeRange === rangeKey);
@@ -1052,14 +991,13 @@ function drawZoomFrame() {
     }
 }
 
-function esc(s) {
+const esc = (s) => {
     return String(s ?? "").replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
 }
 
-function openMonthPanel(mi, year, b) {
-    // sort incidents by time
+const openMonthPanel = (mi, year, b) => {
     const items = b.incidents.slice().sort((a, c) => a.ts - c.ts);
 
     let html = `
@@ -1105,20 +1043,20 @@ function openMonthPanel(mi, year, b) {
     });
 }
 
-function isMeaningful(v) {
+const isMeaningful = (v) => {
     if (v === null || v === undefined) return false;
     const s = String(v).trim();
     if (s === "" || s.toLowerCase() === "null" || s.toLowerCase() === "nan" || s.toLowerCase() === "na" || s.toLowerCase() === "n/a") return false;
     return true;
 }
 
-function prettifyKey(k) {
+const prettifyKey = (k) => {
     return String(k)
         .replace(/_/g, " ")
         .replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
-function getLatLng(d) {
+const getLatLng = (d) => {
     const r = d.raw || {};
     const lat = parseFloat(r.lat ?? r.latitude);
     const lng = parseFloat(r.long ?? r.lng ?? r.longitude);
@@ -1126,15 +1064,13 @@ function getLatLng(d) {
     return { lat, lng };
 }
 
-function openIncident(d) {
-    // Extract lat/lng (adjust keys if your CSV uses different headers)
+const openIncident = (d) => {
     const r = d.raw || {};
     const lat = parseFloat(r.lat ?? r.latitude);
     const lng = parseFloat(r.long ?? r.lng ?? r.longitude);
 
     const hasMap = Number.isFinite(lat) && Number.isFinite(lng);
 
-    // Build a list of non-null fields to render
     const entries = [];
     for (const k of Object.keys(r)) {
         const v = r[k];
@@ -1153,7 +1089,6 @@ function openIncident(d) {
         entries
     };
 
-    // Pop-up must be triggered by a user click to avoid blockers
     const w = window.open("", "_blank");
     if (!w) return;
 
@@ -1253,33 +1188,48 @@ const drawCellContentCircle = (arr, timeRange, x0, y0, cellW, cellH, isDetail = 
     const cy0 = gy + innerH / 2;
     const R = min(innerW, innerH) * 0.5;
 
-    // Sort: most severe first -> closer to center
     const items = arr.slice().sort((a, b) => (b.sev - a.sev) || (a.ts - b.ts));
     const n = items.length;
 
     hoveredIncident = null;
 
+    const placed = [];
+    const bounds = { xMin: gx, xMax: gx + innerW, yMin: gy, yMax: gy + innerH };
+    const center = { x: cx0, y: cy0 };
+    const tries = isDetail ? PLACE_TRIES_DETAIL : PLACE_TRIES_OVERVIEW;
+
     for (let i = 0; i < n; i++) {
         const d = items[i];
 
-        // Radius grows with rank (i): severe first => small radius => center
         const frac = (n <= 1) ? 0 : i / (n - 1);
         const rr = sqrt(frac) * (R * 0.92);
 
-        // Deterministic but well-spaced angles (golden angle spiral)
         const seed = hashToInt(`${d.ts}|${d.school_name}|${d.year}`);
         randomSeed(seed);
         const angle = i * GOLDEN_ANGLE + random(-0.15, 0.15);
 
-        const x = cx0 + cos(angle) * rr;
-        const y = cy0 + sin(angle) * rr;
+        let x = cx0 + cos(angle) * rr;
+        let y = cy0 + sin(angle) * rr;
 
-        // Size: use your global radius but allow a bigger cap in detail
-        const maxMark = min(R * 0.12, isDetail ? 30 : 18);
-        const rDraw = constrain(d.radius * 2 * (isDetail ? 1.5 : 1.0), 2.5, maxMark);
+        const rDraw = d.radius * (isDetail ? 1.5 : 1.0);
 
-        // Stable rotation + stable splatter shape
         const rot = random(TWO_PI);
+
+        const rng = makeRng(seed + 1337);
+        const pos = placeWithMargin(
+            x, y, rDraw,
+            placed,
+            center,
+            bounds,
+            rng,
+            tries,
+            SPLATTER_MARGIN
+        );
+        x = pos.x;
+        y = pos.y;
+
+        placed.push({ x, y, r: rDraw });
+
         randomSeed(seed + 999);
 
         push();
@@ -1288,11 +1238,9 @@ const drawCellContentCircle = (arr, timeRange, x0, y0, cellW, cellH, isDetail = 
         drawSplatter(rDraw);
         pop();
 
-        // Hover hit test (detail view)
         if (isDetail) {
             const dist2 = (mouseX - x) * (mouseX - x) + (mouseY - y) * (mouseY - y);
             if (dist2 <= rDraw * rDraw) {
-                // keep the “closest”/largest hit if multiple overlap
                 if (!hoveredIncident || rDraw > hoveredIncident.r) {
                     hoveredIncident = { d, x, y, r: rDraw };
                 }
@@ -1305,7 +1253,7 @@ const drawCellContentCircle = (arr, timeRange, x0, y0, cellW, cellH, isDetail = 
     }
 }
 
-function drawIncidentTooltip(d, mx, my) {
+const drawIncidentTooltip = (d, mx, my) => {
     const dateStr = d.dt?.toISOString?.().slice(0, 10) || "";
     const title = `${dateStr}`;
     const line1 = d.school_name || "";
@@ -1353,12 +1301,10 @@ const overlapsAny = (x, y, r, placed, margin) => {
 }
 
 const placeWithMargin = (baseX, baseY, r, placed, center, bounds, rng, maxTries, margin) => {
-    // if already ok, accept
     if (!overlapsAny(baseX, baseY, r, placed, margin)) {
         return { x: baseX, y: baseY };
     }
 
-    // direction from center (keeps your "more severe = more centered" ordering)
     let dirX = baseX - center.x;
     let dirY = baseY - center.y;
     let len = Math.hypot(dirX, dirY);
@@ -1371,7 +1317,6 @@ const placeWithMargin = (baseX, baseY, r, placed, center, bounds, rng, maxTries,
     }
     dirX /= len; dirY /= len;
 
-    // perpendicular for sideways jitter
     const perpX = -dirY;
     const perpY = dirX;
 
@@ -1381,7 +1326,6 @@ const placeWithMargin = (baseX, baseY, r, placed, center, bounds, rng, maxTries,
         const outward = t * step;
         const jitter = (rng() * 2 - 1) * step * 0.9;
 
-        // small random rotation of outward direction (still deterministic via rng)
         const angJ = (rng() * 2 - 1) * 0.18;
         const ca = Math.cos(angJ);
         const sa = Math.sin(angJ);
@@ -1391,14 +1335,12 @@ const placeWithMargin = (baseX, baseY, r, placed, center, bounds, rng, maxTries,
         let x = baseX + odx * outward + perpX * jitter;
         let y = baseY + ody * outward + perpY * jitter;
 
-        // clamp inside bounds (keep splatter fully inside)
         x = constrain(x, bounds.xMin + r, bounds.xMax - r);
         y = constrain(y, bounds.yMin + r, bounds.yMax - r);
 
         if (!overlapsAny(x, y, r, placed, margin)) return { x, y };
     }
 
-    // last resort: clamp base and accept
     return {
         x: constrain(baseX, bounds.xMin + r, bounds.xMax - r),
         y: constrain(baseY, bounds.yMin + r, bounds.yMax - r)
