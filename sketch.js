@@ -28,6 +28,7 @@ let leafletMarker = null;
 
 let modeBtn = null
 let backBtn = null
+let homeBtn = null
 
 const GOLDEN_ANGLE = 2.4
 
@@ -68,8 +69,48 @@ const SPLATTER_MARGIN = 3;
 const PLACE_TRIES_OVERVIEW = 12;
 const PLACE_TRIES_DETAIL = 80;
 
+const INCIDENT_FIELDS = [
+    "date",
+    "school_name",
+    "city",
+    "state",
+    "county",
+    "address",
+    "killed",
+    "injured",
+    "casualties",
+    "shooting_type",
+    "age_shooter1",
+    "gender_shooter1",
+    "race_ethnicity_shooter1",
+    "shooter_relationship1",
+    "shooter_deceased1",
+    "deceased_notes1",
+    "age_shooter2",
+    "gender_shooter2",
+    "race_ethnicity_shooter2",
+    "shooter_relationship2",
+    "shooter_deceased2",
+    "deceased_notes2",
+    "weapon",
+    "weapon_source",
+    "shooter_name",
+    "shooter_age",
+    "shooter_gender",
+    "shooter_relationship",
+    "school_type",
+    "nces_id",
+    "source",
+    "url",
+    "notes"
+]
+
+const BORDER_MULTI = "#111111";
+const BORDER_MALE = "#2563eb";
+const BORDER_FEMALE = "#d946ef";
+
 function preload() {
-    table = loadTable("school-shootings-data.csv", "csv", "header")
+    table = loadTable("./school-shootings-data.csv", "csv", "header")
 }
 
 function setup() {
@@ -107,8 +148,16 @@ function setup() {
     });
     backBtn.hide();
 
+    homeBtn = createButton("Back to Home");
+    homeBtn.position(W - 120, 12);
+    homeBtn.addClass("btn");
+    homeBtn.addClass("btn-sm");
+    homeBtn.mousePressed(() => {
+        window.location.href = "index.html";
+    });
+
     monthPanel = createDiv();
-    monthPanel.addClass("monthPanel")
+    monthPanel.addClass("monthPanel shadow border p-3 rounded")
     monthPanel.hide();
 
     const closeBtn = createButton("Close");
@@ -159,6 +208,7 @@ function windowResized() {
     redraw();
     if (modeBtn) modeBtn.position(16, 12);
     if (backBtn) backBtn.position(W - 72 - 16, 12);
+    if (homeBtn) homeBtn.position(W - 120, 12)
 }
 
 const parseTable = (table) => {
@@ -378,7 +428,7 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
         noStroke();
         fill(LABEL);
 
-        textSize(11);
+        textSize(12);
         textAlign(CENTER, CENTER);
         for (let mi = 0; mi < 12; mi++) {
             const cx = gx + mi * blockW + blockW / 2;
@@ -425,8 +475,6 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
 
             const list = b.incidents;
             const k = list.length;
-
-            const Rm = 0.45 * min(blockW, blockH)
 
             const xLeft = gx + mi * blockW;
             const yTop = gy + yi * blockH;
@@ -478,7 +526,8 @@ const drawCellContentCalendar = (arr, timeRange, x0, y0, cellW, cellH, isDetail 
                 push();
                 translate(pos.x, pos.y);
                 rotate(rot);
-                drawSplatter(rDraw);
+                const borderCol = getSplatterBorderColor(d)
+                drawSplatter(rDraw, borderCol);
                 pop();
 
                 if (isDetail) {
@@ -588,10 +637,49 @@ const drawGrid = (cellW, cellH) => {
     }
 }
 
-const drawSplatter = (radius) => {
-    fill(220, 38, 38, 90)
-    stroke(220, 38, 38, 70)
-    strokeWeight(0.8)
+const hasAny = (r, keys) => {
+    return keys.some(k => isMeaningful(r?.[k]))
+}
+
+const isMultipleShooters = (d) => {
+    const r = d.raw || {}
+
+    const hasShooter2 = hasAny(r, [
+        "shooter_name2",
+        "age_shooter2",
+        "gender_shooter2",
+        "race_ethnicity_shooter2",
+        "shooter_relationship2",
+        "shooter_deceased2",
+        "deceased_notes2"
+    ]);
+    return hasShooter2;
+}
+
+const getShooterGender = (d) => {
+    const r = d.raw || {}
+
+    const g = r.gender_shooter1
+
+    if (!isMeaningful(g)) {
+        return "m"
+    }
+
+    return g
+}
+
+const getSplatterBorderColor = (d) => {
+    const isMultiple = isMultipleShooters(d)
+    if (isMultiple) {
+        return BORDER_MULTI
+    }
+    return getShooterGender(d) === "f" ? BORDER_FEMALE : BORDER_MALE
+}
+
+const drawSplatter = (radius, borderCol) => {
+    fill(255, 0, 0, 100)
+    stroke(borderCol || color(220, 38, 38, 70))
+    strokeWeight(1)
 
     const n = floor(random(18, 28))
     beginShape()
@@ -902,6 +990,7 @@ const startZoomIn = (cell) => {
     selectedCell = null;
 
     modeBtn.hide()
+    homeBtn.hide()
 
     zoomFrom = getOverviewCellRect(cell.r, cell.c);
     zoomTo = getDetailRect();
@@ -925,6 +1014,7 @@ const startZoomOut = () => {
     zoomCell = selectedCell;
 
     modeBtn.show()
+    homeBtn.show()
 
     zoomFrom = getDetailRect();
     zoomTo = getOverviewCellRect(selectedCell.r, selectedCell.c);
@@ -1001,13 +1091,14 @@ const openMonthPanel = (mi, year, b) => {
     const items = b.incidents.slice().sort((a, c) => a.ts - c.ts);
 
     let html = `
-    <div class="font-semibold my-2">
+    <div class="font-bold my-2 text-lg">
       ${MONTH_LABELS[mi]} ${year}
     </div>
-    <div class="text-sm">
+    <div class="">
       Total casualties (month): <strong>${b.casualtiesSum}</strong>
       &nbsp;•&nbsp; Incidents: <strong>${b.count}</strong>
     </div>
+    <p class="text-sm italic opacity-80">Click on an incident to view more details</p>
     <div class="divider my-0"></div>
   `;
 
@@ -1015,16 +1106,16 @@ const openMonthPanel = (mi, year, b) => {
         const d = items[i]
         const dateStr = d.dt?.toISOString?.().slice(0, 10) || "";
         html += `
-    <div class="incidentItem" data-idx="${i}"
-         style="padding:8px 0; border-bottom:1px solid #eee; cursor:pointer;">
-      <div style="font-size:12px; font-weight:600;">${esc(d.school_name)}</div>
-      <div style="font-size:12px; opacity:0.85;">
+    <div class="incidentItem py-2 cursor-pointer hover:bg-neutral-100 transition-color tooltip" data-idx="${i}" data-tip="Learn more">
+      <div class="font-bold">${esc(d.school_name)}</div>
+      <div class="opacity-80">
         ${dateStr}
         &nbsp;•&nbsp; Killed: <strong>${d.killed}</strong>
         &nbsp;•&nbsp; Injured: <strong>${d.injured}</strong>
         &nbsp;•&nbsp; Casualties: <strong>${d.casualties}</strong>
       </div>
     </div>
+    <div class="divider my-0"></div>
   `;
     }
 
@@ -1072,7 +1163,8 @@ const openIncident = (d) => {
     const hasMap = Number.isFinite(lat) && Number.isFinite(lng);
 
     const entries = [];
-    for (const k of Object.keys(r)) {
+    for (const k of INCIDENT_FIELDS) {
+        if (!(k in r)) continue;
         const v = r[k];
         if (!isMeaningful(v)) continue;
         entries.push([prettifyKey(k), String(v)]);
@@ -1094,82 +1186,139 @@ const openIncident = (d) => {
 
     const html = `<!doctype html>
 <html>
+
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Incident Details</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Incident Details</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <style>
-    body{ font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; background:#f6f6f6; color:#111; }
-    .wrap{ max-width:1100px; margin:0 auto; padding:18px; }
-    .card{ background:#fff; border:1px solid #ddd; border-radius:12px; padding:14px; box-shadow:0 8px 22px rgba(0,0,0,0.06); }
-    h1{ font-size:18px; margin:0 0 6px; }
-    .meta{ font-size:12px; opacity:.85; margin-bottom:10px; line-height:1.5; }
-    #map{ height:260px; border-radius:12px; border:1px solid #ddd; margin-top:12px; }
-    table{ width:100%; border-collapse:collapse; margin-top:12px; font-size:12px; }
-    td{ padding:8px 10px; border-top:1px solid #eee; vertical-align:top; }
-    td.k{ width:34%; opacity:.75; }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #ddd; font-size:12px; margin-right:8px; background:#fafafa; }
-  </style>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 0;
+            background: #f6f6f6;
+            color: #111;
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 18px;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.06);
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 6px;
+        }
+
+        .meta {
+            opacity: .85;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        #map {
+            height: 260px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+            margin-top: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-top: 1px solid #eee;
+            vertical-align: top;
+        }
+
+        td.k {
+            width: 34%;
+            opacity: .75;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid #ddd;
+            margin-right: 8px;
+            background: #fafafa;
+        }
+    </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1 id="title"></h1>
-      <div class="meta" id="meta"></div>
-      <div id="map" style="display:none;"></div>
+    <div class="wrap">
+        <div class="card">
+            <h1 id="title"></h1>
+            <div class="meta" id="meta"></div>
+            <div id="map" style="display:none;"></div>
 
-      <table id="kv"></table>
+            <table id="kv"></table>
+        </div>
     </div>
-  </div>
 
-  <script>
-    const incident = ${JSON.stringify(payload)};
+    <script>
+        const incident = ${JSON.stringify(payload)};
 
-    document.getElementById("title").textContent = incident.school_name || "Incident";
-    document.getElementById("meta").innerHTML =
-      '<span class="pill">Date: <b>' + (incident.date || '-') + '</b></span>' +
-      '<span class="pill">Killed: <b>' + (incident.killed ?? 0) + '</b></span>' +
-      '<span class="pill">Injured: <b>' + (incident.injured ?? 0) + '</b></span>' +
-      '<span class="pill">Casualties: <b>' + (incident.casualties ?? 0) + '</b></span>';
+        document.getElementById("title").textContent = incident.school_name || "Incident";
+        document.getElementById("meta").innerHTML =
+            '<span class="pill">Date: <b>' + (incident.date || '-') + '</b></span>' +
+            '<span class="pill">Killed: <b>' + (incident.killed ?? 0) + '</b></span>' +
+            '<span class="pill">Injured: <b>' + (incident.injured ?? 0) + '</b></span>' +
+            '<span class="pill">Casualties: <b>' + (incident.casualties ?? 0) + '</b></span>';
 
-    // Render key/value table (non-null only)
-    const kv = document.getElementById("kv");
-    for (const [k, v] of incident.entries) {
-      const tr = document.createElement("tr");
-      const tdK = document.createElement("td");
-      tdK.className = "k";
-      tdK.textContent = k;
+        // Render key/value table (non-null only)
+        const kv = document.getElementById("kv");
+        for (const [k, v] of incident.entries) {
+            const tr = document.createElement("tr");
+            const tdK = document.createElement("td");
+            tdK.className = "k";
+            tdK.textContent = k;
 
-      const tdV = document.createElement("td");
-      tdV.textContent = v;
+            const tdV = document.createElement("td");
+            tdV.textContent = v;
 
-      tr.appendChild(tdK);
-      tr.appendChild(tdV);
-      kv.appendChild(tr);
-    }
+            tr.appendChild(tdK);
+            tr.appendChild(tdV);
+            kv.appendChild(tr);
+        }
 
-    // Map if we have coordinates
-    if (incident.hasMap) {
-      const mapDiv = document.getElementById("map");
-      mapDiv.style.display = "block";
+        // Map if we have coordinates
+        if (incident.hasMap) {
+            const mapDiv = document.getElementById("map");
+            mapDiv.style.display = "block";
 
-      const map = L.map(mapDiv).setView([incident.lat, incident.lng], 12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
-      }).addTo(map);
+            const map = L.map(mapDiv).setView([incident.lat, incident.lng], 12);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(map);
 
-      L.marker([incident.lat, incident.lng]).addTo(map);
+            L.marker([incident.lat, incident.lng]).addTo(map);
 
-      // In case the tab renders before layout is final
-      setTimeout(() => map.invalidateSize(), 0);
-    }
-  </script>
+            // In case the tab renders before layout is final
+            setTimeout(() => map.invalidateSize(), 0);
+        }
+    </script>
 </body>
+
 </html>`;
 
     w.document.open();
@@ -1235,7 +1384,8 @@ const drawCellContentCircle = (arr, timeRange, x0, y0, cellW, cellH, isDetail = 
         push();
         translate(x, y);
         rotate(rot);
-        drawSplatter(rDraw);
+        const borderCol = getSplatterBorderColor(d)
+        drawSplatter(rDraw, borderCol);
         pop();
 
         if (isDetail) {
@@ -1255,14 +1405,15 @@ const drawCellContentCircle = (arr, timeRange, x0, y0, cellW, cellH, isDetail = 
 
 const drawIncidentTooltip = (d, mx, my) => {
     const dateStr = d.dt?.toISOString?.().slice(0, 10) || "";
-    const title = `${dateStr}`;
     const line1 = d.school_name || "";
-    const line2 = `Killed: ${d.killed} • Injured: ${d.injured} • Casualties: ${d.casualties}`;
+    const line2 = `${dateStr}`;
+    const line3 = `Casualties: ${d.casualties}`
+    const line4 = "Click to see more detail"
 
     const pad = 8;
-    textSize(12);
-    const w = max(textWidth(title), textWidth(line1), textWidth(line2)) + pad * 2;
-    const h = 58;
+    textSize(16);
+    const w = max(textWidth(line1), textWidth(line4)) + pad * 2;
+    const h = 72;
 
     let tx = mx + 12;
     let ty = my + 12;
@@ -1276,9 +1427,11 @@ const drawIncidentTooltip = (d, mx, my) => {
 
     fill(34);
     textAlign(LEFT, TOP);
-    text(title, tx + pad, ty + 6);
-    text(line1, tx + pad, ty + 22);
-    text(line2, tx + pad, ty + 38);
+    text(line1, tx + pad, ty + 6);
+    text(line2, tx + pad, ty + 22);
+    text(line3, tx + pad, ty + 38)
+    text(line4, tx + pad, ty + 54)
+
     pop();
 }
 
